@@ -1815,18 +1815,47 @@ main() {
 	enum fw3_family family;
 	enum fw3_table table;
 	struct fw3_ipt_handle *handle;
-
+    struct fw3_ipt_rule *r;
+    struct fw3_device enp0s8_dev = { .set = true };
+    fw3_pr_debug = true;
 	for (family = FW3_FAMILY_V4; family <= FW3_FAMILY_V6; family++)
 	{
 		for (table = FW3_TABLE_FILTER; table <= FW3_TABLE_RAW; table++)
 		{
+            bool commit = false;
 			if (!(handle = fw3_ipt_open(family, table)))
 				continue;
 
 			info(" * Populating %s %s table",
 			     fw3_flag_names[family], fw3_flag_names[table]);
 
-//				fw3_ipt_commit(handle);
+            if (handle->table == FW3_TABLE_FILTER) {
+                fw3_ipt_set_policy(handle, "INPUT",   FW3_FLAG_ACCEPT);
+                fw3_ipt_set_policy(handle, "OUTPUT",  FW3_FLAG_ACCEPT);
+                fw3_ipt_set_policy(handle, "FORWARD", FW3_FLAG_DROP);
+
+#if 1
+                struct fw3_address src_addr;
+                src_addr.set = true;
+                src_addr.range = false;
+                src_addr.invert = false;
+                src_addr.resolved = true;
+                src_addr.family = FW3_FAMILY_V4;
+                inet_pton(AF_INET, "192.168.56.102", &(src_addr.address.v4) );
+                inet_pton(AF_INET, "255.255.255.255", &(src_addr.mask.v4) );
+                sprintf(enp0s8_dev.name, "enp0s8");
+                r = fw3_ipt_rule_create(handle, NULL, &enp0s8_dev, NULL, &src_addr, NULL);
+                fw3_ipt_rule_target(r, "DROP");
+                fw3_ipt_rule_append(r, "INPUT");
+#else
+                fw3_ipt_delete_id_rules(handle, "INPUT");
+#endif
+
+                commit = true;
+            }
+
+            if(commit)
+				fw3_ipt_commit(handle);
 
 			fw3_ipt_close(handle);
 		}
